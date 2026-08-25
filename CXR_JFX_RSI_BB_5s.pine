@@ -56,6 +56,9 @@ h21 = input.bool(true, title="21", group="稼働時間", inline="h2")
 h22 = input.bool(true, title="22", group="稼働時間", inline="h2")
 h23 = input.bool(true, title="23", group="稼働時間", inline="h2")
 
+// ---- エントリー設定 ----
+reverseMode = input.bool(false, title="逆神モード", group="エントリー設定")
+
 // ==================== 指標計算 ====================
 
 // ---- ボリンジャーバンド ----
@@ -108,8 +111,14 @@ tpTicks = tpPips * 10
 slTicks = slPips * 10
 
 // ---- エントリー条件 ----
-buySignal  = ta.crossunder(close, bbLower) and rsiValue <= rsiOversold and volFilterPass and trendFilterPass and inTradingTime and isNotLastBar
-sellSignal = ta.crossover(close, bbUpper) and rsiValue >= rsiOverbought and volFilterPass and trendFilterPass and inTradingTime and isNotLastBar
+buySig  = ta.crossunder(close, bbLower) and rsiValue <= rsiOversold
+sellSig = ta.crossover(close, bbUpper) and rsiValue >= rsiOverbought
+
+buySigFinal  = reverseMode ? sellSig : buySig
+sellSigFinal = reverseMode ? buySig : sellSig
+
+buySignal  = buySigFinal and volFilterPass and trendFilterPass and inTradingTime and isNotLastBar
+sellSignal = sellSigFinal and volFilterPass and trendFilterPass and inTradingTime and isNotLastBar
 
 // ---- ポジション管理 ----
 if buySignal
@@ -160,3 +169,36 @@ if strategy.opentrades > 0
 // ==================== 描画 ====================
 plotshape(buySignal, title="買いシグナル", style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small)
 plotshape(sellSignal, title="売りシグナル", style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small)
+
+// ---- ステータステーブル ----
+atrRatio = atrAvg != 0 ? atrValue / atrAvg : 0.0
+overallPass = volFilterPass and trendFilterPass
+
+volStatusText  = (highVolaStop ? "停止 " : "稼働 ") + str.tostring(atrRatio, "#.##") + "x"
+volStatusColor = highVolaStop ? color.orange : color.green
+
+trendStatusText  = (trendStop ? "停止 ADX:" : "稼働 ADX:") + str.tostring(adxValue, "#.#")
+trendStatusColor = trendStop ? color.red : color.green
+
+overallText  = overallPass ? "エントリー可" : "エントリー停止"
+overallColor = overallPass ? color.teal : color.maroon
+
+thresholdText = "ATR:" + str.tostring(volStopMult, "#.#") + "x / ADX:" + str.tostring(adxThreshold, "#.#")
+
+var table statusTable = table.new(position.top_right, 2, 5, border_width=1)
+if barstate.islast
+    table.cell(statusTable, 0, 0, "フィルター", bgcolor=color.gray, text_color=color.white, text_size=size.small)
+    table.cell(statusTable, 1, 0, "状態", bgcolor=color.gray, text_color=color.white, text_size=size.small)
+    table.cell(statusTable, 0, 1, "ボラATR", text_size=size.small)
+    table.cell(statusTable, 1, 1, volStatusText, text_color=volStatusColor, text_size=size.small)
+    table.cell(statusTable, 0, 2, "トレンドADX", text_size=size.small)
+    table.cell(statusTable, 1, 2, trendStatusText, text_color=trendStatusColor, text_size=size.small)
+    table.cell(statusTable, 0, 3, "総合", text_size=size.small)
+    table.cell(statusTable, 1, 3, overallText, text_color=overallColor, text_size=size.small)
+    table.cell(statusTable, 0, 4, "閾値", bgcolor=color.gray, text_size=size.small)
+    table.cell(statusTable, 1, 4, thresholdText, bgcolor=color.gray, text_size=size.small)
+
+// ---- 逆神モード表示 ----
+var table reverseTable = table.new(position.middle_center, 1, 1)
+if barstate.islast
+    table.cell(reverseTable, 0, 0, reverseMode ? "逆神モード！" : "", text_color=color.yellow, bgcolor=reverseMode ? color.new(color.black, 80) : color.new(color.black, 100), text_size=size.huge, text_font_family=font.family_monospace)
