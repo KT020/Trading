@@ -16,6 +16,13 @@ rsiOverbought = input.int(70, title="⑤買われすぎ水準", minval=0, maxval
 tpPips = input.float(7.2, title="⑥利確幅(pips)", minval=0.0, step=0.1, group="決済設定")
 slPips = input.float(14.4, title="⑦損切り幅(pips)", minval=0.0, step=0.1, group="決済設定")
 
+// ---- ボラティリティフィルター ----
+volFilterEnabled = input.bool(true, title="フィルター有効/無効", group="ボラティリティフィルター")
+atrTimeframe      = input.timeframe("60", title="ATR参照タイムフレーム", group="ボラティリティフィルター")
+atrLength         = input.int(14, title="⑨ATR期間", minval=1, group="ボラティリティフィルター")
+atrAvgLength      = input.int(50, title="⑩ATR平均期間", minval=1, group="ボラティリティフィルター")
+volStopMult       = input.float(1.5, title="⑪平均ATR×N", minval=0.0, step=0.1, group="ボラティリティフィルター")
+
 // ==================== 指標計算 ====================
 
 // ---- ボリンジャーバンド ----
@@ -32,6 +39,15 @@ fill(pUpper, pLower, title="BB Fill", color=color.new(color.gray, 92))
 // ---- RSI ----
 rsiValue = ta.rsi(close, rsiLength)
 
+// ---- ボラティリティフィルター ----
+atrValue = request.security(syminfo.tickerid, atrTimeframe, ta.atr(atrLength), lookahead=barmerge.lookahead_off)
+atrAvg   = ta.sma(atrValue, atrAvgLength)
+normalVola   = atrValue <= atrAvg * volStopMult
+volFilterPass = not volFilterEnabled or normalVola
+highVolaStop  = volFilterEnabled and not normalVola
+
+bgcolor(highVolaStop ? color.new(color.orange, 88) : na, title="高ボラ停止中")
+
 // ==================== エントリー / エグジット ロジック ====================
 
 // ---- pips → ticks 変換 ----
@@ -39,8 +55,8 @@ tpTicks = tpPips * 10
 slTicks = slPips * 10
 
 // ---- エントリー条件 ----
-buySignal  = ta.crossunder(close, bbLower) and rsiValue <= rsiOversold
-sellSignal = ta.crossover(close, bbUpper) and rsiValue >= rsiOverbought
+buySignal  = ta.crossunder(close, bbLower) and rsiValue <= rsiOversold and volFilterPass
+sellSignal = ta.crossover(close, bbUpper) and rsiValue >= rsiOverbought and volFilterPass
 
 // ---- ポジション管理 ----
 if buySignal
