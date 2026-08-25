@@ -1,0 +1,35 @@
+//@version=5
+strategy("CXR/JFX_RSI_BB_5s", overlay=true, default_qty_value=1, pyramiding=2)
+
+// ==================== 入力パラメーター ====================
+
+// ---- BB設定 ----
+bbLength = input.int(20, title="期間", minval=1, group="BB設定")
+bbMult   = input.float(2.0, title="標準偏差", minval=0.001, step=0.1, group="BB設定")
+
+// ---- RSI設定 ----
+rsiLength     = input.int(14, title="期間", minval=1, group="RSI設定")
+rsiOversold   = input.int(30, title="売られすぎ水準", minval=0, maxval=100, group="RSI設定")
+rsiOverbought = input.int(70, title="買われすぎ水準", minval=0, maxval=100, group="RSI設定")
+
+// ==================== 指標計算 ====================
+
+// ---- ボリンジャーバンド ----
+bbBasis = ta.sma(close, bbLength)
+bbDev   = bbMult * ta.stdev(close, bbLength)
+bbUpper = bbBasis + bbDev
+bbLower = bbBasis - bbDev
+
+plot(bbBasis, title="BB Basis", color=color.orange)
+p1 = plot(bbUpper, title="BB Upper", color=color.blue)
+p2 = plot(bbLower, title="BB Lower", color=color.blue)
+fill(p1, p2, title="BB Fill", color=color.new(color.blue, 90))
+
+// ---- RSI ----
+rsiValue = ta.rsi(close, rsiLength)
+
+// ==================== エントリー / エグジット ロジック ====================
+// TODO: 実際の売買条件をここに実装する
+
+// ==================== 描画 ====================
+// TODO: 必要に応じてシグナルのプロットを追加する
