@@ -4,13 +4,17 @@ strategy("CXR/JFX_RSI_BB_5s", overlay=true, default_qty_value=1, pyramiding=2)
 // ==================== 入力パラメーター ====================
 
 // ---- BB設定 ----
-bbLength = input.int(20, title="期間", minval=1, group="BB設定")
-bbMult   = input.float(2.0, title="標準偏差", minval=0.001, step=0.1, group="BB設定")
+bbLength = input.int(20, title="①期間", minval=1, group="BB設定")
+bbMult   = input.float(2.0, title="②標準偏差", minval=0.001, step=0.1, group="BB設定")
 
 // ---- RSI設定 ----
-rsiLength     = input.int(14, title="期間", minval=1, group="RSI設定")
-rsiOversold   = input.int(30, title="売られすぎ水準", minval=0, maxval=100, group="RSI設定")
-rsiOverbought = input.int(70, title="買われすぎ水準", minval=0, maxval=100, group="RSI設定")
+rsiLength     = input.int(14, title="③期間", minval=1, group="RSI設定")
+rsiOversold   = input.int(30, title="④売られすぎ水準", minval=0, maxval=100, group="RSI設定")
+rsiOverbought = input.int(70, title="⑤買われすぎ水準", minval=0, maxval=100, group="RSI設定")
+
+// ---- 決済設定 ----
+tpPips = input.float(7.2, title="⑥利確幅(pips)", minval=0.0, step=0.1, group="決済設定")
+slPips = input.float(14.4, title="⑦損切り幅(pips)", minval=0.0, step=0.1, group="決済設定")
 
 // ==================== 指標計算 ====================
 
@@ -20,16 +24,45 @@ bbDev   = bbMult * ta.stdev(close, bbLength)
 bbUpper = bbBasis + bbDev
 bbLower = bbBasis - bbDev
 
-plot(bbBasis, title="BB Basis", color=color.orange)
-p1 = plot(bbUpper, title="BB Upper", color=color.blue)
-p2 = plot(bbLower, title="BB Lower", color=color.blue)
-fill(p1, p2, title="BB Fill", color=color.new(color.blue, 90))
+pUpper = plot(bbUpper, title="BB Upper", color=color.red)
+pBasis = plot(bbBasis, title="BB Basis", color=color.gray)
+pLower = plot(bbLower, title="BB Lower", color=color.blue)
+fill(pUpper, pLower, title="BB Fill", color=color.new(color.gray, 92))
 
 // ---- RSI ----
 rsiValue = ta.rsi(close, rsiLength)
 
 // ==================== エントリー / エグジット ロジック ====================
-// TODO: 実際の売買条件をここに実装する
+
+// ---- pips → ticks 変換 ----
+tpTicks = tpPips * 10
+slTicks = slPips * 10
+
+// ---- エントリー条件 ----
+buySignal  = ta.crossunder(close, bbLower) and rsiValue <= rsiOversold
+sellSignal = ta.crossover(close, bbUpper) and rsiValue >= rsiOverbought
+
+// ---- ポジション管理 ----
+if buySignal
+    if strategy.position_size < 0
+        strategy.entry("Buy", strategy.long, comment="ドテン買い")
+    else if strategy.position_size > 0
+        strategy.entry("Buy", strategy.long, comment="ピラミッティング買い")
+    else
+        strategy.entry("Buy", strategy.long, comment="新規買い")
+
+if sellSignal
+    if strategy.position_size > 0
+        strategy.entry("Sell", strategy.short, comment="ドテン売り")
+    else if strategy.position_size < 0
+        strategy.entry("Sell", strategy.short, comment="ピラミッティング売り")
+    else
+        strategy.entry("Sell", strategy.short, comment="新規売り")
+
+// ---- 決済（利確・損切り） ----
+strategy.exit("Buy Exit", from_entry="Buy", profit=tpTicks, loss=slTicks)
+strategy.exit("Sell Exit", from_entry="Sell", profit=tpTicks, loss=slTicks)
 
 // ==================== 描画 ====================
-// TODO: 必要に応じてシグナルのプロットを追加する
+plotshape(buySignal, title="買いシグナル", style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small)
+plotshape(sellSignal, title="売りシグナル", style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small)
