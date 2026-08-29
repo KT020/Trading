@@ -62,10 +62,8 @@ rciShort      = f_rci(close, rciShortLength)
 rciMid        = f_rci(close, rciMidLength)
 rciLong       = f_rci(close, rciLongLength)
 
-plot(rciSuperShort, title="RCI超短期", color=color.orange)
-plot(rciShort, title="RCI短期", color=color.red)
-plot(rciMid, title="RCI中期", color=color.blue)
-plot(rciLong, title="RCI長期", color=color.green)
+// RCIの可視化は別ペインのRCI_alert_display.pineを併用してください
+// （overlay=trueの本ストラテジーで描画すると価格スケールが潰れるため）
 
 // ---- 稼働時間（Asia/Tokyo, JST） ----
 hoursEnabled = array.from(h00, h01, h02, h03, h04, h05, h06, h07, h08, h09, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23)
