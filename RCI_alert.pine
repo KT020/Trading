@@ -16,7 +16,7 @@ rciSellLevel         = input.int(10, title="⑧売り水準", group="RCI設定")
 // ---- 決済設定 ----
 slPips = input.float(14.4, title="⑨損切り幅(pips)", minval=0.0, step=0.1, group="決済設定")
 forceCloseMinutes = input.int(8, title="⑩強制決済（分）", minval=0, group="決済設定")
-slConfirmBars = input.int(3, title="⑪損切り判定 待機バー数", minval=0, group="決済設定")
+slConfirmBars = input.int(3, title="⑪損切り判定 連続バー数", minval=1, group="決済設定")
 
 // ---- 稼働時間（Asia/Tokyo, JST） ----
 h00 = input.bool(true, title="00", group="稼働時間", inline="h0")
@@ -104,35 +104,42 @@ if sellSignal
         strategy.entry("Sell", strategy.short, comment="新規売り")
 
 // ---- 決済（RCI水準） ----
-var bool reachedOB     = false
-var bool reachedOS     = false
-var int  crossBarLong  = na
-var int  crossBarShort = na
+var bool reachedOB       = false
+var bool reachedOS       = false
+var bool crossedSellLong = false
+var bool crossedBuyShort = false
+var int  belowSellCount  = 0
+var int  aboveBuyCount   = 0
 
 isNewLong  = strategy.position_size > 0 and strategy.position_size[1] <= 0
 isNewShort = strategy.position_size < 0 and strategy.position_size[1] >= 0
 
 if isNewLong
     reachedOB := false
-    crossBarLong := na
+    crossedSellLong := false
+    belowSellCount := 0
 if isNewShort
     reachedOS := false
-    crossBarShort := na
+    crossedBuyShort := false
+    aboveBuyCount := 0
 
 if strategy.position_size > 0
     if ta.crossover(rciMid, rciSellLevel)
-        crossBarLong := bar_index
+        crossedSellLong := true
+        belowSellCount := 0
     if rciMid >= rciOverbought
         reachedOB := true
+    if crossedSellLong and not reachedOB
+        belowSellCount := rciMid < rciSellLevel ? belowSellCount + 1 : 0
 
 if strategy.position_size < 0
     if ta.crossunder(rciMid, rciBuyLevel)
-        crossBarShort := bar_index
+        crossedBuyShort := true
+        aboveBuyCount := 0
     if rciMid <= rciOversold
         reachedOS := true
-
-barsSinceCrossLong  = na(crossBarLong) ? na : bar_index - crossBarLong
-barsSinceCrossShort = na(crossBarShort) ? na : bar_index - crossBarShort
+    if crossedBuyShort and not reachedOS
+        aboveBuyCount := rciMid > rciBuyLevel ? aboveBuyCount + 1 : 0
 
 // 利確: 中期RCIが利確水準（買われすぎ/売られすぎ）に到達
 tpLongCond  = strategy.position_size > 0 and rciMid >= rciOverbought
@@ -143,9 +150,9 @@ if tpLongCond
 if tpShortCond
     strategy.close("Sell", comment="利確(RCI)")
 
-// 損切り①: 買われすぎ/売られすぎに未到達のまま、上抜け/下抜けから待機バー数経過後に反転
-slLongRciCond  = strategy.position_size > 0 and not reachedOB and not na(barsSinceCrossLong) and barsSinceCrossLong >= slConfirmBars and rciMid < rciSellLevel
-slShortRciCond = strategy.position_size < 0 and not reachedOS and not na(barsSinceCrossShort) and barsSinceCrossShort >= slConfirmBars and rciMid > rciBuyLevel
+// 損切り①: 買われすぎ/売られすぎに未到達のまま、売り/買い水準を連続バー数下抜け/上抜けし続けたとき
+slLongRciCond  = strategy.position_size > 0 and not reachedOB and belowSellCount >= slConfirmBars
+slShortRciCond = strategy.position_size < 0 and not reachedOS and aboveBuyCount >= slConfirmBars
 
 if slLongRciCond
     strategy.close("Buy", comment="損切り(RCI反転)")
