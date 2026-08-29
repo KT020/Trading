@@ -14,9 +14,9 @@ rciBuyLevel          = input.int(-10, title="⑦買い水準", group="RCI設定"
 rciSellLevel         = input.int(10, title="⑧売り水準", group="RCI設定")
 
 // ---- 決済設定 ----
-tpPips = input.float(7.2, title="⑨利確幅(pips)", minval=0.0, step=0.1, group="決済設定")
-slPips = input.float(14.4, title="⑩損切り幅(pips)", minval=0.0, step=0.1, group="決済設定")
-forceCloseMinutes = input.int(8, title="⑪強制決済（分）", minval=0, group="決済設定")
+slPips = input.float(14.4, title="⑨損切り幅(pips)", minval=0.0, step=0.1, group="決済設定")
+forceCloseMinutes = input.int(8, title="⑩強制決済（分）", minval=0, group="決済設定")
+slConfirmBars = input.int(3, title="⑪損切り判定 待機バー数", minval=0, group="決済設定")
 
 // ---- 稼働時間（Asia/Tokyo, JST） ----
 h00 = input.bool(true, title="00", group="稼働時間", inline="h0")
@@ -77,7 +77,6 @@ isNotLastBar    = not (currentMinute == 59 and not nextHourEnabled)
 // ==================== エントリー / エグジット ロジック ====================
 
 // ---- pips → ticks 変換 ----
-tpTicks = tpPips * 10
 slTicks = slPips * 10
 
 // ---- エントリー条件 ----
@@ -104,9 +103,58 @@ if sellSignal
     else
         strategy.entry("Sell", strategy.short, comment="新規売り")
 
-// ---- 決済（利確・損切り） ----
-strategy.exit("Buy Exit", from_entry="Buy", profit=tpTicks, loss=slTicks)
-strategy.exit("Sell Exit", from_entry="Sell", profit=tpTicks, loss=slTicks)
+// ---- 決済（RCI水準） ----
+var bool reachedOB     = false
+var bool reachedOS     = false
+var int  crossBarLong  = na
+var int  crossBarShort = na
+
+isNewLong  = strategy.position_size > 0 and strategy.position_size[1] <= 0
+isNewShort = strategy.position_size < 0 and strategy.position_size[1] >= 0
+
+if isNewLong
+    reachedOB := false
+    crossBarLong := na
+if isNewShort
+    reachedOS := false
+    crossBarShort := na
+
+if strategy.position_size > 0
+    if ta.crossover(rciMid, rciSellLevel)
+        crossBarLong := bar_index
+    if rciMid >= rciOverbought
+        reachedOB := true
+
+if strategy.position_size < 0
+    if ta.crossunder(rciMid, rciBuyLevel)
+        crossBarShort := bar_index
+    if rciMid <= rciOversold
+        reachedOS := true
+
+barsSinceCrossLong  = na(crossBarLong) ? na : bar_index - crossBarLong
+barsSinceCrossShort = na(crossBarShort) ? na : bar_index - crossBarShort
+
+// 利確: 中期RCIが利確水準（買われすぎ/売られすぎ）に到達
+tpLongCond  = strategy.position_size > 0 and rciMid >= rciOverbought
+tpShortCond = strategy.position_size < 0 and rciMid <= rciOversold
+
+if tpLongCond
+    strategy.close("Buy", comment="利確(RCI)")
+if tpShortCond
+    strategy.close("Sell", comment="利確(RCI)")
+
+// 損切り①: 買われすぎ/売られすぎに未到達のまま、上抜け/下抜けから待機バー数経過後に反転
+slLongRciCond  = strategy.position_size > 0 and not reachedOB and not na(barsSinceCrossLong) and barsSinceCrossLong >= slConfirmBars and rciMid < rciSellLevel
+slShortRciCond = strategy.position_size < 0 and not reachedOS and not na(barsSinceCrossShort) and barsSinceCrossShort >= slConfirmBars and rciMid > rciBuyLevel
+
+if slLongRciCond
+    strategy.close("Buy", comment="損切り(RCI反転)")
+if slShortRciCond
+    strategy.close("Sell", comment="損切り(RCI反転)")
+
+// 損切り②: 損切り幅(pips)に到達
+strategy.exit("Buy Exit", from_entry="Buy", loss=slTicks)
+strategy.exit("Sell Exit", from_entry="Sell", loss=slTicks)
 
 // ---- 稼働時間外の全決済 ----
 prevInTradingTime = inTradingTime[1]
